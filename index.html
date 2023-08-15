@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="shortcut icon" type="image/png" href="icon.png" />
+    <link rel="stylesheet" href="../dist/bundle.css" />
+    <title>IFC.js web viewer</title>
+  </head>
+  <body>
+    <div class="input">
+      <input type="file" name="load" id="file-input" />
+    </div>
+    <!-- <div class="actions">
+      <button id="fetch">fetchForText</button>
+    </div> -->
+    <div class="canvas">
+      <canvas id="three-canvas"></canvas>
+    </div>
+    <!-- <div class="file-opener">
+      <a class="invisible" id="save-button">Save JSON</a>
+    </div> -->
+    <div class="general-container">
+        <div class="container" id="left-container"></div>
+        <div class="separator"></div>
+        <div class="container" id="right-container">
+            <div class="ifc-container">
+                <pre id="json"></pre>
+            </div>
+            <div class="property-container">
+                <div class="input-container">
+                    <input id="expressIDLabel">
+                    <button class="property-button" onclick="getPropertyWithExpressId()">Get Properties</button>
+                </div>
+                <div id="properties"></div>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- <div class="checkboxes">
+      <div>
+        <input checked="true" id="IFCWALLSTANDARDCASE" type="checkbox" />
+        Walls
+      </div>
+      <div>
+        <input checked="true" id="IFCSLAB" type="checkbox" />
+        Slabs
+      </div>
+      <div>
+        <input checked="true" id="IFCWINDOW" type="checkbox" />
+        Windows
+      </div>
+      <div>
+        <input checked="true" id="IFCFURNISHINGELEMENT" type="checkbox" />
+        Furniture
+      </div>
+      <div>
+        <input checked="true" id="IFCDOOR" type="checkbox" />
+        Doors
+      </div>
+      <div>
+        <input checked="true" id="IFCMEMBER" type="checkbox" />
+        Curtain wall structure
+      </div>
+      <div>
+        <input checked="true" id="IFCPLATE" type="checkbox" />
+        Curtain wall plates
+      </div>
+    </div> -->
+    <script src="dist/bundle.js"></script>
+  </body>
+</html>
