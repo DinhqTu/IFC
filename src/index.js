@@ -12,7 +12,13 @@ import {
   Raycaster,
   Vector2,
   MeshLambertMaterial,
+  Mesh
 } from "three";
+import {
+  acceleratedRaycast,
+  computeBoundsTree,
+  disposeBoundsTree,
+} from "three-mesh-bvh";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls";
 
 import { IFCLoader } from "web-ifc-three/IFCLoader";
@@ -22,13 +28,9 @@ import {
   IfcAPI,
   IFCSPACE,
   IFCBUILDINGSTOREY,
-  IFCRELDEFINESBYPROPERTIES
+  IFCRELDEFINESBYPROPERTIES,
+  IFCSLAB
 } from "web-ifc/web-ifc-api";
-// class World {
-//   constructor() {
-
-//   }
-// }
 
 //Creates the Three.js scene
 const scene = new Scene();
@@ -38,9 +40,6 @@ const size = {
   width: window.innerWidth,
   height: window.innerHeight,
 };
-
-// const output = document.querySelector(".output");
-// const output2 = document.querySelector(".output2");
 
 //Creates the camera (point of view of the user)
 const aspect = size.width / size.height;
@@ -104,23 +103,35 @@ window.addEventListener("resize", () => {
 });
 
 // Sets up the IFC loading
-const ifcLoader = new IFCLoader();
+let ifcLoader = new IFCLoader();
 const ifcapi = new IfcAPI();
 ifcLoader.ifcManager.setWasmPath("../wasm/");
 
-// // const booter = new Load();
-// // booter.setWasmPath("wasm/");
-const input = document.getElementById("file-input");
+const booter = new Load();
+booter.setWasmPath("wasm/");
 
+ifcapi.SetWasmPath("../wasm/");
 const ifcModels = [];
+
+const input = document.getElementById("file-input");
 async function loadIFC(path) {
   ifcLoader.load(path, (ifcModel) => {
+    ifcModel.visible = false; 
+
+    const modelCopy = new Mesh(
+      ifcModel.geometry,
+      new MeshLambertMaterial({
+        transparent: true,
+        opacity: 0.1,
+        color: 0x77aaff,
+      })
+    );
     ifcModels.push(ifcModel);
     scene.add(ifcModel);
+    scene.add(modelCopy);
   });
 }
 
-loadIFC("../model/47L.ifc");
 // // booter.loadIFC("../model/47L.ifc");
 
 input.addEventListener(
@@ -130,25 +141,25 @@ input.addEventListener(
     var ifcURL = URL.createObjectURL(file);
     loadIFC(ifcURL);
     // booter.loadIFC(ifcURL, (ifcModel) => scene.add(ifcModel));
+    fetch(ifcURL)
+    .then((response) => response.text())
+    .then((data) => {
+      LoadFileData(data);
+    });
   },
   false
 );
   
-ifcapi.SetWasmPath("../wasm/");
-
-fetch("model/47L.ifc")
-  .then((response) => response.text())
-  .then((data) => {
-    // This will send the file data to our LoadFileData method
-    // console.log(data);
-    LoadFileData(data);
-  });
+  
+// loadIFC("../model/SPAHOTEL.ifc");
 
 async function LoadFileData(ifcAsText) {
   const uint8array = new TextEncoder().encode(ifcAsText);
   modelID = await OpenIfc(uint8array);
   // console.log("ModelID", modelID);
+  // getAllProperties(modelID);
   getPropertyWithExpressId(modelID);
+
   // getLevels();
 
 }
@@ -187,6 +198,25 @@ function createDownloadLink(modelID) {
 
 const table = document.createElement("table");
 
+function displayPropertyFromExpressID(elementID) {
+  // const elName = Object.getPrototypeOf(props).constructor.name;
+  table.innerHTML = "";
+  
+  const element = ifcapi.GetLine(0, elementID);
+  
+  for (const [key, value] of Object.entries(element)) {
+    if (key === 'type') {
+      logAllSameType(value);
+    }
+    if (value) {
+      if (typeof(value) === 'object'){
+        createRowInTable(`${key}`, JSON.stringify(value));
+      } else createRowInTable(`${key}`, value)
+      
+    }
+  }
+}
+
 function getPropertyWithExpressId(modelID=0) {
   // Clearing if previous values present
   const prop = document.getElementById("properties");
@@ -195,43 +225,18 @@ function getPropertyWithExpressId(modelID=0) {
 
   // Getting the Element ID from User and parsing it to
   const elementID = parseInt(document.getElementById("expressIDLabel").value);
-  // Getting Element Data - Refer Below
-  // If third parameter is added as true, we get a flatten result
-  // const elementAll = ifcapi.GetAllLines(modelID);
-  // console.log("All", elementAll);
-
-  // const raw = ifcapi.GetRawLineData(modelID, elementID);
-  // console.log("Raw", raw);
+  
   const element = ifcapi.GetLine(modelID, elementID);
-  // Now you can fetch GUID of that Element
-  // const geometry = IfcAPI.GetGeometry(modelID, elementID);
-  // createRowInTable("Type", geometry);
+  
   for (const [key, value] of Object.entries(element)) {
     if (value) {
       if (typeof(value) === 'object'){
         createRowInTable(`${key}`, JSON.stringify(value));
       } else createRowInTable(`${key}`, value)
     }
-    // console.log(key, value);
   }
-  // const eid = element.expressId;
-  // createRowInTable("ExpressID", eid);
 
-  // const name = element.Name.value;
-  // createRowInTable("Name", name);
-
-  // const ifcType = element.__proto__.constructor.name;
-  // createRowInTable("IfcType", ifcType);
-
-  // const type = element.ObjectType.value;
-  // createRowInTable("Object Type", type);
-
-  // const tag = element.Tag.value;
-  // createRowInTable("Tag", tag);
-
-  // grab all propertyset lines in the file
   let lines = ifcapi.GetLineIDsWithType(modelID, IFCRELDEFINESBYPROPERTIES);
-  // console.log("Lines", lines);
 
   // In the below array we will store the IDs of the Property Sets found
   let propSetIds = [];
@@ -267,8 +272,6 @@ function getPropertyWithExpressId(modelID=0) {
       }
   }
 
-  
-
   // Getting the Property Sets from their IDs
   let propsets = propSetIds.map(id => ifcapi.GetLine(modelID, id, true));
 
@@ -288,74 +291,61 @@ function getPropertyWithExpressId(modelID=0) {
           }
       });
   });
-
-  // Appending Table to our Div
+  
   prop.appendChild(table);
 }
 
 function createRowInTable(label, value) {
-  // Create a New Row Element
   const row = document.createElement("tr");
-
-  // Add Label to 1st Coloumn and Value to 2nd Coloumn
   row.innerHTML = "<td>" + label + "</td><td>" + value + "</td>";
-
-  // Appending the Row to Table - It means inserting Row inside Table
   table.appendChild(row);
 }
 
+async function releaseMemory() {
+  await ifcLoader.ifcManager.dispose();
+  ifcLoader = null;
+  ifcLoader = new IFCLoader();
 
-// function getAllSpaces(modelID) {
-//   // Get all the propertyset lines in the IFC file
-//   let lines = ifcapi.GetLineIDsWithType(modelID, IFCSPACE);
-//   let lineSize = lines.size();
-//   let spaces = [];
-//   for (let i = 0; i < lineSize; i++) {
-//     // Getting the ElementID from Lines
-//     let relatedID = lines.get(i);
-//     // Getting Element Data using the relatedID
-//     let relDefProps = ifcapi.GetLine(modelID, relatedID);
-//     spaces.push(relDefProps);
-//   }
-//   return spaces;
-// }
+  await ifcLoader.ifcManager.setWasmPath("../wasm/");
 
-// function getIfcFile(url) {
-//   return new Promise((resolve, reject) => {
-//     var oReq = new XMLHttpRequest();
-//     oReq.responseType = "arraybuffer";
-//     oReq.addEventListener("load", () => {
-//       resolve(new Uint8Array(oReq.response));
-//     });
-//     oReq.open("GET", url);
-//     oReq.send();
-//   });
-// }
-// ifcapi.Init().then(() => {
-//   getIfcFile("model/47L.ifc").then((ifcData) => {
-//     modelID = ifcapi.OpenModel(ifcData);
-//     let isModelOpened = ifcapi.IsModelOpen(modelID);
-//     console.log({ isModelOpened });
-//     let spaces = getAllSpaces(modelID);
-//     console.log({ spaces });
-//     ifcapi.CloseModel(modelID);
-//   });
-// });
-// let modelID = 0;
+  ifcModels.length = 0;
+  table.innerHTML = "";
+}
 
-// // const button = new Button(threeCanvas, aspect, scene, booter.getIfcModels());
-// // const button = new Button(threeCanvas, aspect, scene, ifcModels);
-// // threeCanvas.ondblclick = button.pick;
+// Sets up memory disposalo
+const releaseBtn = document.getElementById("memory-button");
+releaseBtn.addEventListener(`click`, () => releaseMemory());
+// releaseBtn.addEventListener(`click`, () => button.releaseMemory());
+
+const preselectMat = new MeshLambertMaterial({
+  transparent: true,
+  opacity: 0.6,
+  color: 0xff88ff,
+  depthTest: false,
+});
+const selectMat = new MeshLambertMaterial({
+  transparent: true,
+  opacity: 0.6,
+  color: 0xff00ff,
+  depthTest: false,
+});
+
+ifcLoader.ifcManager.setupThreeMeshBVH(computeBoundsTree, disposeBoundsTree, acceleratedRaycast);
+
+const button = new Button(ifcLoader, ifcapi, threeCanvas, aspect, scene, ifcModels);
+threeCanvas.ondblclick = (event) => button.pick(event, (elementID) => displayPropertyFromExpressID(elementID));
+window.onmousemove = (event) => button.highlight(event, undefined, 'highlightModel');
+window.ondblclick = (event) => button.highlight(event, selectMat, 'selectModel');
+// window.onmousemove = (event) => button.highlight(event, preselectMat, preselectModel);
 
 
+async function logAllSameType(typeID) {
+  const slabsID = await ifcLoader.ifcManager.getAllItemsOfType(0, typeID);
 
-// // async function OpenIfc(ifcAsText) {
-// //   await ifcapi.Init();
-// //   return ifcapi.OpenModel(ifcAsText);
-// // }
+  for (let i = 0; i <= slabsID.length; i++) {
+    const slabID = slabsID[i];
+    const slabProperties = await ifcLoader.ifcManager.getItemProperties(0, slabID);
+    console.log(slabProperties);
+  }
+}
 
-// // document.getElementById("fetch").onclick = booter.fetchForText('../../model/47L.ifc');
-// // booter.fetchForText();
-
-// // threeCanvas.onmousemove = (event) => button.highlight(event, preselectMat, scene, preselectModel);
-// // threeCanvas.ondblclick = (event) => button.highlight(event, selectMat, scene, selectModel);
